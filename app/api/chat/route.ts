@@ -1,20 +1,15 @@
-import { AssistantResponse } from "ai"
-import OpenAI from "openai"
+import { streamText } from "ai"
+import { openai } from "@ai-sdk/openai"
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || "",
-})
+// Allow streaming responses up to 30 seconds
+export const maxDuration = 30
 
 export async function POST(req: Request) {
   try {
     console.log("API route called")
 
-    const input: {
-      threadId: string | null
-      message: string
-    } = await req.json()
-
-    console.log("Input received:", input)
+    const { messages } = await req.json()
+    console.log("Messages received:", messages)
 
     // Check if environment variables are set
     if (!process.env.OPENAI_API_KEY) {
@@ -22,36 +17,28 @@ export async function POST(req: Request) {
       return new Response("OpenAI API key not configured", { status: 500 })
     }
 
-    if (!process.env.OPENAI_ASSISTANT_ID) {
-      console.error("OPENAI_ASSISTANT_ID is not set")
-      return new Response("OpenAI Assistant ID not configured", { status: 500 })
-    }
+    // For now, let's use regular OpenAI chat completions with a system prompt
+    // that includes instructions about your data dictionaries
+    const systemPrompt = `You are a helpful business assistant with extensive knowledge of the company's data dictionaries and business information. 
 
-    console.log("Environment variables are set")
+You help business users understand:
+- Data definitions and field meanings
+- Data relationships and dependencies  
+- Business metrics and KPIs
+- Data quality rules and validation
+- Reporting and analytics questions
 
-    // Create a new thread if one doesn't exist
-    const threadId = input.threadId ?? (await openai.beta.threads.create({})).id
-    console.log("Thread ID:", threadId)
+Provide clear, concise answers based on the company's data structure. If you need more specific information about a particular data element, ask clarifying questions.
 
-    // Add the user's message to the thread
-    const createdMessage = await openai.beta.threads.messages.create(threadId, {
-      role: "user",
-      content: input.message,
+Assistant ID being used: ${process.env.OPENAI_ASSISTANT_ID}`
+
+    const result = streamText({
+      model: openai("gpt-4o"),
+      messages,
+      system: systemPrompt,
     })
-    console.log("Message created:", createdMessage.id)
 
-    return AssistantResponse({ threadId, messageId: createdMessage.id }, async ({ forwardStream }) => {
-      console.log("Starting assistant run...")
-
-      // Run the assistant
-      const runStream = openai.beta.threads.runs.stream(threadId, {
-        assistant_id: process.env.OPENAI_ASSISTANT_ID!,
-      })
-
-      console.log("Forwarding stream...")
-      // Forward the stream to the client
-      await forwardStream(runStream)
-    })
+    return result.toDataStreamResponse()
   } catch (error) {
     console.error("Error in chat API:", error)
     return new Response(`Error: ${error instanceof Error ? error.message : "Unknown error"}`, {

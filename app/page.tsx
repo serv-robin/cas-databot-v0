@@ -57,12 +57,19 @@ export default function ChatPage() {
                   message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
                 }`}
               >
-                {message.content}
+                <div className="whitespace-pre-wrap">{message.content}</div>
               </div>
             </div>
           ))}
+
           {error && (
-            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">Error: {error.message}</div>
+            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+              <strong>Error:</strong> {error.message}
+              <details className="mt-2">
+                <summary className="cursor-pointer">Debug Info</summary>
+                <pre className="text-xs mt-1 overflow-auto">{JSON.stringify(error, null, 2)}</pre>
+              </details>
+            </div>
           )}
           <div ref={messagesEndRef} />
         </div>
@@ -77,8 +84,12 @@ export default function ChatPage() {
               className="flex-1"
               disabled={isLoading}
             />
-            <Button type="submit" disabled={isLoading}>
-              <Send className="h-4 w-4" />
+            <Button type="submit" disabled={isLoading || !input.trim()}>
+              {isLoading ? (
+                <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </Button>
           </form>
         </div>
