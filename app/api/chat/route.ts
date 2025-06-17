@@ -1,21 +1,61 @@
-import { openai } from "@ai-sdk/openai"
-import { streamText } from "ai"
+import { AssistantResponse } from "ai"
+import OpenAI from "openai"
 
-// This is where you would configure the system prompt with knowledge of your data dictionaries
-const SYSTEM_PROMPT = `
-You are a helpful business assistant with extensive knowledge of the company's data dictionaries.
-You help business users understand data definitions, relationships, and answer questions about business metrics.
-Provide clear, concise answers based on the company's data structure.
-`
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || "",
+})
 
 export async function POST(req: Request) {
-  const { messages } = await req.json()
+  try {
+    console.log("API route called")
 
-  const result = streamText({
-    model: openai("gpt-4o"),
-    messages,
-    system: SYSTEM_PROMPT,
-  })
+    const input: {
+      threadId: string | null
+      message: string
+    } = await req.json()
 
-  return result.toDataStreamResponse()
+    console.log("Input received:", input)
+
+    // Check if environment variables are set
+    if (!process.env.OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is not set")
+      return new Response("OpenAI API key not configured", { status: 500 })
+    }
+
+    if (!process.env.OPENAI_ASSISTANT_ID) {
+      console.error("OPENAI_ASSISTANT_ID is not set")
+      return new Response("OpenAI Assistant ID not configured", { status: 500 })
+    }
+
+    console.log("Environment variables are set")
+
+    // Create a new thread if one doesn't exist
+    const threadId = input.threadId ?? (await openai.beta.threads.create({})).id
+    console.log("Thread ID:", threadId)
+
+    // Add the user's message to the thread
+    const createdMessage = await openai.beta.threads.messages.create(threadId, {
+      role: "user",
+      content: input.message,
+    })
+    console.log("Message created:", createdMessage.id)
+
+    return AssistantResponse({ threadId, messageId: createdMessage.id }, async ({ forwardStream }) => {
+      console.log("Starting assistant run...")
+
+      // Run the assistant
+      const runStream = openai.beta.threads.runs.stream(threadId, {
+        assistant_id: process.env.OPENAI_ASSISTANT_ID!,
+      })
+
+      console.log("Forwarding stream...")
+      // Forward the stream to the client
+      await forwardStream(runStream)
+    })
+  } catch (error) {
+    console.error("Error in chat API:", error)
+    return new Response(`Error: ${error instanceof Error ? error.message : "Unknown error"}`, {
+      status: 500,
+    })
+  }
 }

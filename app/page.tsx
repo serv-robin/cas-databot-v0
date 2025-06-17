@@ -8,7 +8,12 @@ import { Send } from "lucide-react"
 import Logo from "@/components/logo"
 
 export default function ChatPage() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat()
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
+    api: "/api/chat",
+    onError: (error) => {
+      console.error("Chat error:", error)
+    },
+  })
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [showWelcome, setShowWelcome] = useState(true)
 
@@ -56,6 +61,9 @@ export default function ChatPage() {
               </div>
             </div>
           ))}
+          {error && (
+            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">Error: {error.message}</div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
